@@ -8,17 +8,17 @@
 <?import javafx.scene.text.Text?>
 <VBox alignment="CENTER" prefHeight="600.0" prefWidth="800.0" xmlns="http://javafx.com/javafx/11.0.2"
       xmlns:fx="http://javafx.com/fxml/1" fx:controller="MainController" fx:id="mainCloudPanel">
-<!--    <MenuBar>-->
-<!--        <Menu text="File">-->
-<!--            <MenuItem onAction="#getFile" text="Get list form server"/>-->
-<!--            <MenuItem onAction="#upload" text="Upload file"/>-->
-<!--            <MenuItem onAction="#btnExit" text="Exit"/>-->
-<!--        </Menu>-->
-<!--        <Menu text="Help">-->
-<!--            <MenuItem text="About"/>-->
+    <MenuBar>
+        <Menu text="File">
 
-<!--        </Menu>-->
-<!--    </MenuBar>-->
+            <MenuItem onAction="#upload" text="Upload file"/>
+            <MenuItem onAction="#btnExit" text="Exit"/>
+        </Menu>
+        <Menu text="Help">
+            <MenuItem text="About"/>
+
+        </Menu>
+    </MenuBar>
 
     <HBox VBox.vgrow="ALWAYS">
         <VBox HBox.hgrow="ALWAYS">
@@ -28,7 +28,7 @@
 <!--                <TextField fx:id="pathField" HBox.hgrow="ALWAYS" editable="false"/>-->
                 <Button text="UP" onAction="#btnPathUpSrv" />
 
-                <Button text="Refresh fils" onAction="#btnRefresh"/>
+<!--                <Button text="Refresh fils" onAction="#btnRefresh"/>-->
 
 
             </HBox>
@@ -51,7 +51,7 @@
     <HBox spacing="5">
         <Button maxWidth="Infinity" focusTraversable="false" onAction="#upload" text="upload" HBox.hgrow="ALWAYS"/>
         <Button maxWidth="Infinity" focusTraversable="false" onAction="#download" text="Download" HBox.hgrow="ALWAYS"/>
-        <Button maxWidth="Infinity" focusTraversable="false" text="Delete" HBox.hgrow="ALWAYS"/>
+        <Button maxWidth="Infinity" focusTraversable="false" onAction="#deleteFile" text="Delete" HBox.hgrow="ALWAYS"/>
         <Button maxWidth="Infinity" focusTraversable="false" onAction="#btnExit" text="Exit" HBox.hgrow="ALWAYS"/>
         <padding>
             <Insets top="5" left="5" right="5" bottom="5"/>

@@ -1,3 +1,6 @@
+import Model.*;
+import io.netty.handler.codec.serialization.ObjectDecoderInputStream;
+import io.netty.handler.codec.serialization.ObjectEncoderOutputStream;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
@@ -15,134 +18,108 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.ResourceBundle;
 import java.util.stream.Collectors;
 
 public class MainController implements Initializable {
-    private final int BUFFER_SIZE = 8192;
+    private ObjectDecoderInputStream in;
+    private ObjectEncoderOutputStream out;
+    private Path baseDir = Paths.get(System.getProperty("user.home"));
     private final String HOST = "127.0.0.1";
     private final int PORT = 8081;
-    private final String SERVER_DIR = "C:\\Cloud_Storage";
+
     public ComboBox localDisksClient;
     public TextField pathFieldClient;
     public TableView<FileInfo> filesTableClient;
+    //переделать лист на таблицу чтобы одинаково было
     //    public TableView filesTableServer;
     public ListView filesTableServer;
 
 
-    private Socket socket;
-
-
-    private DataInputStream in;
-    private DataOutputStream out;
-
-
+    //    private void read() {
+//        try {
+//            while (true) {
+//                String command = in.readUTF();
+//                System.out.println("srv comand "+ command);
+//                if (command.equals("list")) {
+//                    addListServerFiles();
+//                } else if (command.equals("download")) {
+//
+//                }
+//            }
+//        } catch (IOException e) {
+//            e.printStackTrace();
+//        }
+//    }
     private void read() {
         try {
             while (true) {
-                String command = in.readUTF();
-                System.out.println("srv comand "+ command);
-                if (command.equals("list")) {
-                    addListServerFiles();
-                } else if (command.equals("download")) {
-
+                AbstractMessage msg = (AbstractMessage) in.readObject();
+                switch (msg.getMessageType()) {
+                    case FILE:
+                        FileMessage fileMessage = (FileMessage) msg;
+                        Files.write(
+                                Paths.get(pathFieldClient.getText()).resolve(fileMessage.getFileName()),
+                                fileMessage.getBytes()
+                        );
+                        Platform.runLater(this::updateFilesClient);
+                        break;
+                    case FILES_LIST:
+                        FilesList files = (FilesList) msg;
+                        Platform.runLater(() -> fillServerView(files.getFiles()));
+                        break;
                 }
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    private void addListServerFiles() {
-        try {
-            int fileCount = in.readInt();
-            Platform.runLater(() -> filesTableServer.getItems().clear());
-            for (int i = 0; i < fileCount; i++) {
-                String name = in.readUTF();
-                Platform.runLater(() -> filesTableServer.getItems().add(name));
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-
+    private void fillServerView(List<String> list) {
+        filesTableServer.getItems().clear();
+        filesTableServer.getItems().addAll(list);
     }
-
 
     @Override
     public void initialize(URL url, ResourceBundle resourceBundle) {
         try {
-            socket = new Socket(HOST, PORT);
-            in = new DataInputStream(socket.getInputStream());
-            out = new DataOutputStream(socket.getOutputStream());
+            Socket socket = new Socket(HOST, PORT);
+            out = new ObjectEncoderOutputStream(socket.getOutputStream());
+            in = new ObjectDecoderInputStream(socket.getInputStream());
+
             Thread thread = new Thread(this::read);
             thread.setDaemon(true);
             thread.start();
         } catch (IOException e) {
             e.printStackTrace();
         }
-        try {
-            out.writeUTF("getFile");
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+
         addFilesClient();
         openFolderClient();
-//        addFilesServer();
-
 
     }
 
-
+    // загрузка файлов НА сервер
     public void upload(ActionEvent actionEvent) throws IOException {
         String file = getSelectedFileName();
         Path path = Paths.get(pathFieldClient.getText()).resolve(file);
-        System.out.println(path);
-        out.writeUTF("putFile");
-        out.writeUTF(file);
-        out.writeLong(Files.size(path));
-        out.write(Files.readAllBytes(path));
-        out.flush();
+        out.writeObject(new FileMessage(path));
 
 
     }
+
+    // загрузка файла с сервера
     public void download(ActionEvent actionEvent) throws IOException {
-//        System.out.println(filesTableServer.getSelectionModel().getSelectedItem().toString());
-        byte[] buffer = new byte[BUFFER_SIZE];
 
         String file = filesTableServer.getSelectionModel().getSelectedItem().toString();
-        Path path = Paths.get(pathFieldClient.getText()).resolve(file);
+        out.writeObject(new FileRequest(file));
 
-        out.writeUTF("download");
-        out.writeUTF(file);
-
-        long size = in.readLong();
-
-
-        try (FileOutputStream fos = new FileOutputStream(path.toFile())){
-            for (int i = 0; i < (size + BUFFER_SIZE - 1) / BUFFER_SIZE; i++) {
-                int read = in.read(buffer);
-                fos.write(buffer, 0, read);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        addFilesClient();
 
     }
-
-    public void getFile(ActionEvent actionEvent) {
-
-    }
-
 
     public void btnExit(ActionEvent actionEvent) {
         Platform.exit();
-    }
-
-
-    public void uploadFile(ActionEvent actionEvent) throws IOException {
-
     }
 
     public void selectDisk(ActionEvent actionEvent) {
@@ -161,21 +138,12 @@ public class MainController implements Initializable {
             alert.showAndWait();
         }
     }
-
-//    public void insertFilesToTableServer(Path path) {
-//        try {
-//            filesTableServer.getItems().addAll(Files.list(path).map(FileInfo::new).collect(Collectors.toList()));
-//        } catch (IOException e) {
-//            Alert alert = new Alert(Alert.AlertType.WARNING, "Ошибка обновления списка файлов", ButtonType.OK);
-//            alert.showAndWait();
-//        }
-//    }
-
+    // переделать, сейчас работает на клиенте
     public void btnPathUpSrv(ActionEvent actionEvent) {
-        Path upPath = Paths.get(pathFieldClient.getText()).getParent();
-        if (upPath != null) {
-            insertFilesToTableClient(upPath);
-        }
+//        Path upPath = Paths.get(pathFieldClient.getText()).getParent();
+//        if (upPath != null) {
+//            insertFilesToTableClient(upPath);
+//        }
     }
 
     private void selectLocalDisk() {
@@ -223,53 +191,14 @@ public class MainController implements Initializable {
         selectLocalDisk();
 
 
-        // переделать для серверной части директорию старта начала постороения списка...
-
-
-        insertFilesToTableClient(Paths.get("C:\\testCS"));
+        insertFilesToTableClient(baseDir);
     }
 
-//    private void addFilesServer() {
-//        TableColumn<FileInfo, String> fileTypeColumn = new TableColumn<>();
-//        fileTypeColumn.setCellValueFactory(param -> new SimpleStringProperty(param.getValue().getType().getName()));
-//        fileTypeColumn.setPrefWidth(24);
-//
-//
-//        TableColumn<FileInfo, String> fileNameColumn = new TableColumn<>("Name");
-//        fileNameColumn.setCellValueFactory(param -> new SimpleStringProperty(param.getValue().getFileName()));
-//        fileNameColumn.setPrefWidth(240);
-//
-//        TableColumn<FileInfo, Long> fileSizeColumn = new TableColumn<>("Size");
-//        fileSizeColumn.setCellValueFactory(param -> new SimpleObjectProperty<>(param.getValue().getSize()));
-//        fileSizeColumn.setCellFactory(column -> {
-//            return new TableCell<FileInfo, Long>() {
-//                @Override
-//                protected void updateItem(Long item, boolean empty) {
-//                    super.updateItem(item, empty);
-//                    if (item == null || empty) {
-//                        setText(null);
-//                        setStyle("");
-//                    } else {
-//                        String text = String.format("%,d bytes", item);
-//                        if (item == -1L) {
-//                            text = "Folder";
-//                        }
-//                        setText(text);
-//                    }
-//                }
-//            };
-//        });
-//        fileSizeColumn.setPrefWidth(120);
-//
-//        filesTableServer.getColumns().addAll(fileTypeColumn, fileNameColumn, fileSizeColumn);
-//        filesTableServer.getSortOrder().add(fileSizeColumn);
-//
-//
-//        // переделать для серверной части директорию старта начала постороения списка...
-//
-//
-//        insertFilesToTableServer(Paths.get(SERVER_DIR));
-//    }
+    private void updateFilesClient() {
+
+        insertFilesToTableClient(Paths.get(pathFieldClient.getText()));
+    }
+
 
     private void openFolderClient() {
         filesTableClient.setOnMouseClicked(new EventHandler<MouseEvent>() {
@@ -279,14 +208,9 @@ public class MainController implements Initializable {
                     Path path = Paths.get(pathFieldClient.getText()).resolve(filesTableClient.getSelectionModel().getSelectedItem().getFileName());
                     if (Files.isDirectory(path)) {
                         insertFilesToTableClient(path);
-//                        fullPathFile(path);
                     }
                 }
-//                else {
-//
-//                    Path path = Paths.get(fullFilePath.getText()).resolve(filesTable.getSelectionModel().getSelectedItem().getFileName());
-//                    fullPathFile();
-//                }
+
             }
         });
     }
@@ -296,23 +220,27 @@ public class MainController implements Initializable {
             return null;
         return filesTableClient.getSelectionModel().getSelectedItem().getFileName();
     }
+    // удаление файла клиента или сервера
+    public void deleteFile() throws IOException {
+        if (filesTableClient.isFocused()) {
+            String file = getSelectedFileName();
+            Path path = Paths.get(pathFieldClient.getText()).resolve(file);
+            try {
+                Files.delete(path);
+            } catch (IOException x) {
+                x.printStackTrace();
+            }
+        } else if (filesTableServer.isFocused()) {
+            String file = filesTableServer.getSelectionModel().getSelectedItem().toString();
 
-    public String getCurrentPath() {
-        return pathFieldClient.getText();
-
-
-    }
-
-    public void btnRefresh(ActionEvent actionEvent) {
-        try {
-            out.writeUTF("getFile");
-        } catch (IOException e) {
-            Alert alert = new Alert(Alert.AlertType.WARNING, "неудалось получить список файлов", ButtonType.OK);
-            alert.showAndWait();
+            out.writeObject(new DeleteFile(file));
         }
+        updateFilesClient();
+
     }
 
 
-    }
+}
+
 
 
